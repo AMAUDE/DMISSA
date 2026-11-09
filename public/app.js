@@ -23,7 +23,7 @@ function showUser(){}
 
 /* ====== données ====== */
 async function boot(){
-  const [p,z,l]=await Promise.all([fetch('/data/plans.json?v='+Date.now()).then(r=>r.json()),fetch('/data/zones.geojson?v='+Date.now()).then(r=>r.json()),fetch('/data/lots.geojson?v='+Date.now()).then(r=>r.json())]);
+  const [p,z,l]=await Promise.all([fetch('data/plans.json?v='+Date.now()).then(r=>r.json()),fetch('data/zones.geojson?v='+Date.now()).then(r=>r.json()),fetch('data/lots.geojson?v='+Date.now()).then(r=>r.json())]);
   plans=p.map(x=>({...x,t:x.type==='NORMAL'?0:x.type==='REGULARISATION'?1:2,s:x.source==='DU'?0:x.source==='DTC'?1:2,a:x.arrete?1:0,k:norm(x.nom+' '+(x.barcode||''))}));
   plans.forEach(x=>byId[x.id]=x);
   zones=z.features.filter(f=>f.geometry).map(f=>({id:f.properties.id,a:f.properties.a,b:f.properties.b,bbox:bboxOf(f.geometry)}));
@@ -234,20 +234,43 @@ function refreshList(){
   el.onclick=e=>{const i=e.target.closest('.item');if(i)selectPlan(+i.dataset.p)};
 }
 
+
+/* ====== API commentaires : serveur si disponible, sinon stockage local (hébergement statique) ====== */
+let SERVER=null;
+async function detectServer(){
+  if(SERVER!==null)return SERVER;
+  try{const r=await fetch('api/comments/counts');SERVER=r.ok&&(r.headers.get('content-type')||'').includes('json');}catch{SERVER=false}
+  return SERVER;
+}
+const LS_KEY='dmissa_comments';
+const lsAll=()=>{try{return JSON.parse(localStorage.getItem(LS_KEY)||'[]')}catch{return[]}};
+async function apiList(target){
+  if(await detectServer())return fetch('api/comments?target='+encodeURIComponent(target)).then(r=>r.json()).catch(()=>[]);
+  return lsAll().filter(c=>c.target===target).sort((a,b)=>b.id-a.id);
+}
+async function apiAdd(target,author,text){
+  if(await detectServer())return fetch('api/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target,author,text})});
+  const all=lsAll();all.push({id:Date.now(),target,author,text,created:new Date().toISOString()});localStorage.setItem(LS_KEY,JSON.stringify(all));
+}
+async function apiCounts(){
+  if(await detectServer())return fetch('api/comments/counts').then(r=>r.json()).catch(()=>S.counts);
+  const o={};lsAll().forEach(c=>o[c.target]=(o[c.target]||0)+1);return o;
+}
+
 /* ====== commentaires (collaboratif) ====== */
 let cmtTarget=null;
 async function loadComments(target){
   cmtTarget=target;const box=$('#cmt');if(!box)return;
-  const list=await fetch('/api/comments?target='+encodeURIComponent(target)).then(r=>r.json()).catch(()=>[]);
+  const list=await apiList(target);
   if(cmtTarget!==target||!$('#cmt'))return;
   const keep=box.querySelector('textarea')?.value||'';
   box.innerHTML=`<textarea id="ct" rows="2" placeholder="Ajouter un commentaire, une correction, une question…">${esc(keep)}</textarea><div style="margin:6px 0 10px"><button class="btn" id="cs">Publier</button></div>`+
    (list.length?list.map(c=>`<div class="cmt"><b>${esc(c.author)}</b><small>${new Date(c.created).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'})}</small><div>${esc(c.text)}</div></div>`).join(''):'<div class="empty">Aucun commentaire pour le moment.</div>');
   $('#cs').onclick=async()=>{const t=$('#ct').value.trim();if(!t)return;const a=user()||askUser();if(!a)return;
-    await fetch('/api/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target,author:a,text:t})});$('#ct').value='';loadComments(target);pollCounts()};
+    await apiAdd(target,a,t);$('#ct').value='';loadComments(target);pollCounts()};
 }
 async function pollCounts(){
-  S.counts=await fetch('/api/comments/counts').then(r=>r.json()).catch(()=>S.counts);
+  S.counts=await apiCounts();
   if(!document.activeElement||document.activeElement.id!=='q')refreshList();
 }
 setInterval(()=>{pollCounts();if(cmtTarget&&document.activeElement?.id!=='ct')loadComments(cmtTarget)},15000);pollCounts();

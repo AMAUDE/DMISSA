@@ -10,3 +10,8 @@ Données (`data/`) exportées depuis QGIS : `lots.geojson` (couche Bingerville_p
 (Chevauchements_zones_simplifiees), `plans.json` (un enregistrement par plan + emprise utilisée pour le zoom ;
 la couche d'emprises est aussi dans `OUT/Emprises_plans.gpkg`, sans être affichée).
 Pour actualiser les données : ré-exporter ces trois fichiers depuis QGIS.
+
+## Mise en ligne (GitHub Pages)
+`node build-pages.js` génère le dossier `docs/` (site statique). Dans GitHub : Settings → Pages → Source « Deploy from a branch » → branche `main`, dossier `/docs`.
+Adresse du site : https://amaude.github.io/DMISSA/
+Sans serveur, les commentaires sont enregistrés localement dans le navigateur ; pour des commentaires partagés, lancer `node server.js`.

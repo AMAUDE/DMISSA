@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DMISSA · Plans de lotissement de Bingerville</title>
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="style.css?v=5">
+</head>
+<body>
+<header>
+  <div class="brand"><img class="logo" src="logo.png" alt="ANKO Technology"><div><b>DMISSA</b><span>Plans de lotissement · Bingerville</span></div></div>
+  <nav id="tabs">
+    <button data-mode="overview" class="on">Vue d'ensemble</button>
+    <button data-mode="direction">Direction</button>
+    <button data-mode="chev">Chevauchement</button>
+  </nav>
+</header>
+<main>
+  <aside id="side"></aside>
+  <section id="mapwrap">
+    <div id="map"></div>
+    <div id="basemap"><button data-b="plan" class="on">Plan</button><button data-b="sat">Satellite</button></div>
+    <div id="legend"></div>
+    <div id="hint"></div>
+    <div id="loader">Chargement des plans…</div>
+  </section>
+</main>
+<div id="modal" hidden><div class="card"><button class="x" id="mx">×</button><div id="mbody"></div></div></div>
+<script src="vendor/maplibre-gl.js"></script>
+<script>document.write('<script src="app.js?v='+Date.now()+'"><\/script>')</script>
+</body>
+</html>
