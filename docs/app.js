@@ -2,13 +2,14 @@
 /* ====== constantes ====== */
 const TYPE_LAB=['Normal','Régularisation','Non renseigné'], TYPE_COL=['#2e9e6b','#f0a030','#9aa5b1'];
 const SRC_LAB=['DU','DTC','Non renseigné'], SRC_COL=['#1f6fd1','#8e44ad','#9aa5b1'];
+const CONF_LAB=['Non conforme','Conforme','Non renseigné'], CONF_COL=['#d9342b','#2e9e6b','#9aa5b1'];
 const COL_A='#1f6fd1', COL_B='#f0a030', RED='#d9342b';
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const norm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 
 /* ====== état ====== */
-const S={mode:'overview',q:'',types:new Set([0,1,2]),arr:'all',srcs:new Set([0,1,2]),sel:null,zone:null,counts:{}};
+const S={mode:'overview',q:'',types:new Set([0,1,2]),arr:'all',srcs:new Set([0,1,2]),confs:new Set([0,1,2]),sel:null,zone:null,counts:{}};
 let plans=[],byId={},zones=[],map,loaded=false;
 
 /* ====== utilisateur (collaboration) ====== */
@@ -24,7 +25,7 @@ function showUser(){}
 /* ====== données ====== */
 async function boot(){
   const [p,z,l]=await Promise.all([fetch('data/plans.json?v='+Date.now()).then(r=>r.json()),fetch('data/zones.geojson?v='+Date.now()).then(r=>r.json()),fetch('data/lots.geojson?v='+Date.now()).then(r=>r.json())]);
-  plans=p.map(x=>({...x,t:x.type==='NORMAL'?0:x.type==='REGULARISATION'?1:2,s:x.source==='DU'?0:x.source==='DTC'?1:2,a:x.arrete?1:0,k:norm(x.nom+' '+(x.barcode||''))}));
+  plans=p.map(x=>({...x,t:x.type==='NORMAL'?0:x.type==='REGULARISATION'?1:2,s:x.source==='DU'?0:x.source==='DTC'?1:2,a:x.arrete?1:0,cf:x.conformite==='conforme'?1:x.conformite==='non_conforme'?0:2,k:norm(x.nom+' '+(x.barcode||''))}));
   plans.forEach(x=>byId[x.id]=x);
   zones=z.features.filter(f=>f.geometry).map(f=>({id:f.properties.id,a:f.properties.a,b:f.properties.b,bbox:bboxOf(f.geometry)}));
   initMap(l,z);
@@ -69,7 +70,7 @@ function onLotClick(e){
   const f=e.features[0],p=byId[f.properties.p];if(!p)return;
   const lot=[f.properties.i?'Îlot '+esc(f.properties.i):'',f.properties.l?'Lot '+esc(f.properties.l):'',f.properties.u?esc(f.properties.u):''].filter(Boolean).join(' · ');
   const btn=S.mode==='chev'?'':`<br><a href="#" onclick="selectPlan(${p.id});return false">Isoler ce lotissement</a>`;
-  new maplibregl.Popup({closeButton:false,maxWidth:'280px'}).setLngLat(e.lngLat).setHTML(`<b>${esc(p.nom)}</b><br>${lot||'<span style="color:#888">Entité sans numéro</span>'}${btn}`).addTo(map);
+  new maplibregl.Popup({closeButton:false,maxWidth:'280px'}).setLngLat(e.lngLat).setHTML(`<b>${esc(p.nom)}</b><br>${lot||'<span style="color:#888">Entité sans numéro</span>'}${S.mode==='conf'?'<br><b style="color:'+CONF_COL[p.cf]+'">'+CONF_LAB[p.cf]+'</b>':''}${btn}`).addTo(map);
 }
 $('#basemap').onclick=e=>{const b=e.target.closest('button');if(!b||!map)return;
   document.querySelectorAll('#basemap button').forEach(x=>x.classList.toggle('on',x===b));
@@ -79,6 +80,7 @@ $('#basemap').onclick=e=>{const b=e.target.closest('button');if(!b||!map)return;
 function matches(p,ignoreQ){
   if(!ignoreQ&&S.q&&!p.k.includes(norm(S.q)))return false;
   if(S.mode==='direction')return S.srcs.has(p.s);
+  if(S.mode==='conf')return S.confs.has(p.cf);
   if(!S.types.has(p.t))return false;
   if(S.arr==='avec'&&!p.a)return false;
   if(S.arr==='sans'&&p.a)return false;
@@ -92,9 +94,9 @@ function applyMap(){
   if(!loaded)return;
   const ids=visibleIds();
   const flt=ids.length?['in',['get','p'],['literal',ids]]:['==',1,0];
-  const dir=S.mode==='direction';
+  const dir=S.mode==='direction',cnf=S.mode==='conf';
   map.setFilter('lots-fill',flt);map.setFilter('labels',flt);
-  map.setPaintProperty('lots-fill','fill-color',dir?['match',['get','s'],0,SRC_COL[0],1,SRC_COL[1],SRC_COL[2]]:['match',['get','t'],0,TYPE_COL[0],1,TYPE_COL[1],TYPE_COL[2]]);
+  map.setPaintProperty('lots-fill','fill-color',cnf?['match',['get','c'],1,CONF_COL[1],0,CONF_COL[0],CONF_COL[2]]:dir?['match',['get','s'],0,SRC_COL[0],1,SRC_COL[1],SRC_COL[2]]:['match',['get','t'],0,TYPE_COL[0],1,TYPE_COL[1],TYPE_COL[2]]);
   const chev=S.mode==='chev';
   const vis=(l,v)=>map.setLayoutProperty(l,'visibility',v?'visible':'none');
   vis('lots-fill',!chev);vis('lots-line',!chev);vis('chev-lots',chev);vis('chev-lots-line',chev);vis('zones-fill',chev);vis('zones-line',chev);vis('zone-sel',chev);
@@ -119,6 +121,7 @@ function applyMap(){
 function legend(){
   const row=(c,t)=>`<div><i style="background:${c}"></i>${t}</div>`;let h='';
   if(S.mode==='overview')h='<b>Type de plan</b>'+TYPE_LAB.map((t,i)=>row(TYPE_COL[i],t)).join('');
+  else if(S.mode==='conf')h='<b>Conformité du plan</b>'+[1,0,2].filter(i=>i<2||plans.some(p=>p.cf===2)).map(i=>row(CONF_COL[i],CONF_LAB[i])).join('')+'<div style="color:#6b7a8c;max-width:170px">Selon le champ « classe » de la couche</div>';
   else if(S.mode==='direction')h='<b>Direction source</b>'+SRC_LAB.map((t,i)=>row(SRC_COL[i],t)).join('');
   else h='<b>Chevauchement</b>'+row(RED,'Zone de chevauchement')+(S.zone?row(COL_A,'Lotissement A')+row(COL_B,'Lotissement B')+'<div style="color:#6b7a8c">Zoomez pour voir les lots</div>':'<div style="color:#6b7a8c">Zoomez pour voir les lots<br>en conflit</div>');
   $('#legend').innerHTML=h;
@@ -150,11 +153,13 @@ window.selectPlan=selectPlan;
 
 /* ====== panneau latéral ====== */
 const tag=(t,c)=>`<span class="tag" style="background:${c}">${esc(t)}</span>`;
-const planTags=p=>tag(TYPE_LAB[p.t],TYPE_COL[p.t])+tag(SRC_LAB[p.s],SRC_COL[p.s])+(p.a?tag('Arrêté','#0f2a43'):'<span class="tag out">Sans arrêté</span>');
+const confTag=p=>tag(CONF_LAB[p.cf],CONF_COL[p.cf]);
+const planTags=p=>(S.mode==='conf'?confTag(p):'')+tag(TYPE_LAB[p.t],TYPE_COL[p.t])+tag(SRC_LAB[p.s],SRC_COL[p.s])+(p.a?tag('Arrêté','#0f2a43'):'<span class="tag out">Sans arrêté</span>');
 function renderSide(){
   const el=$('#side');
   if(S.mode==='overview')el.innerHTML=overviewHTML();
   else if(S.mode==='direction')el.innerHTML=directionHTML();
+  else if(S.mode==='conf')el.innerHTML=confHTML();
   else el.innerHTML=chevHTML();
   bindSide();refreshList();if(S.sel)loadComments('plan:'+S.sel);if(S.zone)loadComments('zone:'+S.zone);
 }
@@ -184,6 +189,23 @@ function directionHTML(){
   ${S.sel?detailHTML():''}
   <div class="sec"><h3 id="lh">Lotissements</h3><div class="list" id="list"></div></div>`;
 }
+function confHTML(){
+  const n=[0,1,2].map(i=>plans.filter(p=>p.cf===i).length),tot=plans.length,pct=v=>Math.round(v/tot*100);
+  const showNR=n[2]>0, idx=showNR?[1,0,2]:[1,0];
+  const row=(lab,f)=>`<tr><td>${lab}</td>${idx.map(i=>`<td>${plans.filter(p=>f(p)&&p.cf===i).length}</td>`).join('')}<td><b>${plans.filter(f).length}</b></td></tr>`;
+  const head=`<tr><th></th>${idx.map(i=>`<th>${CONF_LAB[i]==='Non conforme'?'Non conf.':CONF_LAB[i]}</th>`).join('')}<th>Total</th></tr>`;
+  return `
+  <div class="sec"><h3>Conformité des plans</h3>
+    <div class="kpis"><div class="kpi"><b>${tot}</b><span>lotissements</span></div><div class="kpi"><b style="color:${CONF_COL[1]}">${n[1]}</b><span>conformes</span></div><div class="kpi"><b style="color:${CONF_COL[0]}">${n[0]}</b><span>non conformes</span></div></div>
+    <div class="bar">${idx.map(i=>`<div style="width:${n[i]/tot*100}%;background:${CONF_COL[i]}"></div>`).join('')}</div>
+    <div style="font-size:12px;color:var(--mut)">${pct(n[1])} % des lotissements sont conformes · ${pct(n[0])} % non conformes. Conformité issue du champ « classe » de la couche.</div></div>
+  <div class="sec"><h3>Filtrer par conformité</h3><div class="chips" id="fConf">${idx.map(i=>`<button class="chip ${S.confs.has(i)?'on':''}" data-c="${i}"><i style="background:${CONF_COL[i]}"></i>${CONF_LAB[i]} <b>${n[i]}</b></button>`).join('')}</div></div>
+  <div class="sec"><h3>Conformité × direction</h3><table>${head}${[0,1,2].map(s=>row(SRC_LAB[s],p=>p.s===s)).join('')}</table></div>
+  <div class="sec"><h3>Conformité × type de plan</h3><table>${head}${[0,1,2].map(s=>row(TYPE_LAB[s],p=>p.t===s)).join('')}</table></div>
+  <div class="sec"><h3>Rechercher</h3><input type="search" id="q" placeholder="Nom du lotissement…" value="${esc(S.q)}" autocomplete="off"></div>
+  ${S.sel?detailHTML():''}
+  <div class="sec"><h3 id="lh">Lotissements</h3><div class="list" id="list"></div></div>`;
+}
 function chevPairs(){
   const m={};zones.forEach(z=>{const a=byId[z.a],b=byId[z.b];const k=[SRC_LAB[a.s],SRC_LAB[b.s]].sort().join(' ↔ ');m[k]=(m[k]||0)+1});return Object.entries(m).sort((x,y)=>y[1]-x[1]);
 }
@@ -206,12 +228,12 @@ function chevHTML(){
   <div class="sec"><h3>Lotissements les plus concernés</h3><table>${top.map(([i,n])=>`<tr><td>${esc(byId[i].nom)}</td><td><b>${n}</b></td></tr>`).join('')}</table></div>
   <div class="sec"><h3>Zones de chevauchement</h3><div class="list" id="list"></div></div>`;
 }
-window.goPlan=id=>{S.mode='overview';document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.mode==='overview'));S.zone=null;S.types=new Set([0,1,2]);S.arr='all';selectPlan(id)};
+window.goPlan=id=>{S.mode='overview';S.confs=new Set([0,1,2]);document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.mode==='overview'));S.zone=null;S.types=new Set([0,1,2]);S.arr='all';selectPlan(id)};
 function detailHTML(){
   const p=byId[S.sel];
   const arr=p.arrete?p.arrete.split(/\s*;\s*/).map(a=>`<div>${esc(a)}</div>`).join(''):`<span style="color:var(--mut)">${p.appr?esc(p.appr):'Non renseigné'}</span>`;
   return `<div class="card2"><h2>${esc(p.nom)}</h2><div style="margin-bottom:8px" class="m">${planTags(p)}</div>
-  <div class="kv"><span>Code-barre</span><b>${esc(p.barcode||'—')}</b><span>Type</span><b>${TYPE_LAB[p.t]}</b><span>Direction</span><b>${SRC_LAB[p.s]}</b><span>N° d'arrêté</span><div>${arr}</div></div>
+  <div class="kv"><span>Code-barre</span><b>${esc(p.barcode||'—')}</b><span>Type</span><b>${TYPE_LAB[p.t]}</b><span>Conformité</span><b style="color:${CONF_COL[p.cf]}">${CONF_LAB[p.cf]}</b><span>Direction</span><b>${SRC_LAB[p.s]}</b><span>N° d'arrêté</span><div>${arr}</div></div>
   <div style="margin-top:10px"><button class="btn sec2" onclick="clearSel()">✕ Afficher tous les lotissements</button></div></div>
   <div class="sec"><h3>Commentaires</h3><div id="cmt"></div></div>`;
 }
@@ -220,6 +242,7 @@ function bindSide(){
     q.onkeydown=e=>{if(e.key==='Enter'){const r=plans.filter(p=>matches(p));if(r.length>=1)selectPlan(r[0].id)}}}
   const ft=$('#fTypes');if(ft)ft.onclick=e=>{const b=e.target.closest('button');if(!b)return;const t=+b.dataset.t;S.types.has(t)?S.types.delete(t):S.types.add(t);b.classList.toggle('on');refreshList();applyMap()};
   const fa=$('#fArr');if(fa)fa.onclick=e=>{const b=e.target.closest('button');if(!b)return;S.arr=b.dataset.a;fa.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));refreshList();applyMap()};
+  const fc=$('#fConf');if(fc)fc.onclick=e=>{const b=e.target.closest('button');if(!b)return;const t=+b.dataset.c;S.confs.has(t)?S.confs.delete(t):S.confs.add(t);b.classList.toggle('on');refreshList();applyMap()};
   const fs=$('#fSrc');if(fs)fs.onclick=e=>{const b=e.target.closest('button');if(!b)return;const t=+b.dataset.s;S.srcs.has(t)?S.srcs.delete(t):S.srcs.add(t);b.classList.toggle('on');refreshList();applyMap()};
 }
 function refreshList(){
