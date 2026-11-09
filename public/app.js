@@ -15,11 +15,11 @@ let plans=[],byId={},zones=[],map,loaded=false;
 function user(){return localStorage.getItem('dmissa_user')||''}
 function askUser(){
   const n=prompt('Votre nom (affiché dans vos commentaires) :',user());
-  if(n&&n.trim()){localStorage.setItem('dmissa_user',n.trim());showUser();}
+  if(n&&n.trim()){localStorage.setItem('dmissa_user',n.trim());}
   return user();
 }
-function showUser(){$('#userName').textContent=user()||'Identifiez-vous'}
-$('#btnUser').onclick=askUser;showUser();
+function showUser(){}
+
 
 /* ====== données ====== */
 async function boot(){
@@ -41,8 +41,8 @@ function initMap(lots,zonesGJ){
   const b=allBbox(plans);
   map=new maplibregl.Map({container:'map',bounds:[[b[0],b[1]],[b[2],b[3]]],fitBoundsOptions:{padding:40},
     style:{version:8,glyphs:'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',sources:{
-      plan:{type:'raster',tiles:BASES.plan.tiles,tileSize:256,attribution:BASES.plan.attr},
-      sat:{type:'raster',tiles:BASES.sat.tiles,tileSize:256,attribution:BASES.sat.attr}},
+      plan:{type:'raster',tiles:BASES.plan.tiles,tileSize:256,maxzoom:16,attribution:BASES.plan.attr},
+      sat:{type:'raster',tiles:BASES.sat.tiles,tileSize:256,maxzoom:19,attribution:BASES.sat.attr}},
       layers:[{id:'plan',type:'raster',source:'plan'},{id:'sat',type:'raster',source:'sat',layout:{visibility:'none'}}]}});
   map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
   map.addControl(new maplibregl.ScaleControl({unit:'metric'}),'bottom-right');
@@ -251,19 +251,5 @@ async function pollCounts(){
   if(!document.activeElement||document.activeElement.id!=='q')refreshList();
 }
 setInterval(()=>{pollCounts();if(cmtTarget&&document.activeElement?.id!=='ct')loadComments(cmtTarget)},15000);pollCounts();
-
-/* ====== à propos ====== */
-$('#btnInfo').onclick=()=>{$('#mbody').innerHTML=`<h2>Présentation des travaux de la DMISSA</h2>
-<p>La <b>Direction de la Modernisation, de la Simplification et de la Sécurisation des Actes (DMISSA)</b> conduit l'acquisition, la numérisation, le géoréférencement et l'assemblage des plans de lotissement. Cette plateforme présente les résultats pour la commune de <b>Bingerville</b>, avec l'appui d'IZY Technology.</p>
-<h3 style="margin-top:16px">Chaîne de traitement en 10 étapes</h3>
-<ol><li>Réception des plans physiques</li><li>Identification du plan et de la direction source</li><li>Attribution d'un code-barres</li><li>Réhabilitation des documents</li><li>Numérisation</li><li>Géoréférencement</li><li>Vectorisation des données cartographiques</li><li>Identification des erreurs topographiques</li><li>Assemblage des plans</li><li>Validation en comités techniques</li></ol>
-<h3 style="margin-top:16px">Repères du rapport d'analyse (juillet – août 2026)</h3>
-<ul><li>Bingerville : <b>157 plans</b> numérisés (132 de la DU, 25 de la DTC).</li>
-<li><b>81 lotissements</b> en situation de chevauchement : 58 de la DU, 4 de la DTC, 19 de source non renseignée.</li>
-<li>9 chevauchements entre deux directions (DU / DTC) ; plusieurs versions successives d'un même lotissement coexistent (ex. AKANDJE II).</li>
-<li>Le secteur « Bingerville Nord-Est » concentre l'essentiel des conflits multiples.</li></ul>
-<h3 style="margin-top:16px">Sur cette plateforme</h3>
-<ul><li><b>Vue d'ensemble</b> : tout l'assemblage, recherche d'un lotissement, type de plan et numéro d'arrêté.</li><li><b>Direction</b> : plans selon leur source (DU, DTC, non renseigné).</li><li><b>Chevauchement</b> : zones de superposition ; zoomez pour voir les lots concernés.</li><li>Chaque lotissement et chaque zone peut être commenté par l'équipe.</li></ul>`;$('#modal').hidden=false};
-$('#mx').onclick=()=>$('#modal').hidden=true;$('#modal').onclick=e=>{if(e.target.id==='modal')$('#modal').hidden=true};
 
 boot();
