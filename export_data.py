@@ -21,9 +21,9 @@ for k in keys:
     p=dict(id=pid[k],barcode=k[0] or None,nom=k[1] or '(sans nom)',type=r.statut_lotis or 'NON RENSEIGNÉ',source=r.source or 'Non renseigné',arrete=r.arrete_approb,appr=r.plan_approuve,origine=r.origine,nb_lots=int(len(sub)),bbox=[round(float(x),6) for x in b],conformite=conf)
     plans.append(p); meta[k]=p
 json.dump(plans,open(D+r'\plans.json','w',encoding='utf8'),ensure_ascii=False)
-# zones : couche QGIS « Chevauchements_zones_simplifiees » (fichier + journal WAL = état courant)
-ZG=r'C:\Users\SITC\Desktop\CLAUDE\DMISSA\OUT\Chevauchements_zones_simplifiees.gpkg'
-zr_=gpd.read_file(ZG)
+# zones : couche QGIS « chevauchement_bon » (zones simplifiées validées)
+ZG=r'C:\Users\SITC\Documents\Promotions_Bingerville\DMISSA PRESENTATION\suite\chevauchement_bon.shp'
+zr_=gpd.read_file(ZG).rename(columns={'lotissemen':'lotissement_A','lotissem_1':'lotissement_B'})
 total_lignes=len(zr_); sans=int(zr_.geometry.isna().sum()); zr_=zr_[zr_.geometry.notna()&~zr_.geometry.is_empty].copy()
 def kk(b,n): return ((b if isinstance(b,str) else '').strip(),(n if isinstance(n,str) else '').strip())
 zr_['a']=[pid.get(kk(b,n)) for b,n in zip(zr_.barcode_A,zr_.lotissement_A)]
