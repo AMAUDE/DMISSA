@@ -21,13 +21,21 @@ for k in keys:
     p=dict(id=pid[k],barcode=k[0] or None,nom=k[1] or '(sans nom)',type=r.statut_lotis or 'NON RENSEIGNÉ',source=r.source or 'Non renseigné',arrete=r.arrete_approb,appr=r.plan_approuve,origine=r.origine,nb_lots=int(len(sub)),bbox=[round(float(x),6) for x in b],conformite=conf)
     plans.append(p); meta[k]=p
 json.dump(plans,open(D+r'\plans.json','w',encoding='utf8'),ensure_ascii=False)
-# zones : on conserve la géométrie existante, ids de plans re-calculés
-old=json.load(open(r'C:\Users\SITC\Desktop\CLAUDE\DMISSA\PLATEFORME\data_backup_avant_maj\plans.json',encoding='utf8')); oldk={p['id']:(p['barcode'] or '',p['nom']) for p in old}
-z=json.load(open(r'C:\Users\SITC\Desktop\CLAUDE\DMISSA\PLATEFORME\data_backup_avant_maj\zones.geojson'))
-for f in z['features']:
-    f['properties']['a']=pid[oldk[f['properties']['a']]]; f['properties']['b']=pid[oldk[f['properties']['b']]]
+# zones : lues directement dans le GeoPackage des zones simplifiées (zones sans géométrie ignorées)
+ZG=r'C:\Users\SITC\Desktop\CLAUDE\DMISSA\OUT\Chevauchements_zones_simplifiees.gpkg'
+zr_=gpd.read_file(ZG)
+sans=int(zr_.geometry.isna().sum()); zr_=zr_[zr_.geometry.notna()&~zr_.geometry.is_empty].copy()
+def kk(b,n): return ((b if isinstance(b,str) else '').strip(),(n if isinstance(n,str) else '').strip())
+zr_['a']=[pid.get(kk(b,n)) for b,n in zip(zr_.barcode_A,zr_.lotissement_A)]
+zr_['b']=[pid.get(kk(b,n)) for b,n in zip(zr_.barcode_B,zr_.lotissement_B)]
+bad=zr_[zr_.a.isna()|zr_.b.isna()]
+if len(bad): print('zones non rattachées :',bad[['id','lotissement_A','lotissement_B']].to_string()); zr_=zr_.drop(bad.index)
+zr_['id']=zr_['id'].astype(int)
+z4=zr_.to_crs(4326)
+z={'type':'FeatureCollection','features':[{'type':'Feature','properties':{'id':int(r.id),'a':int(r.a),'b':int(r.b)},'geometry':json.loads(shapely.to_geojson(shapely.set_precision(r.geometry,1e-6)))} for r in z4.itertuples()]}
 json.dump(z,open(D+r'\zones.geojson','w'))
-zg=gpd.GeoDataFrame({'id':[f['properties']['id'] for f in z['features']],'a':[f['properties']['a'] for f in z['features']],'b':[f['properties']['b'] for f in z['features']]},geometry=[shapely.geometry.shape(f['geometry']) for f in z['features']],crs=4326).to_crs(32630)
+zg=gpd.GeoDataFrame({'id':zr_.id.values,'a':zr_.a.astype(int).values,'b':zr_.b.astype(int).values},geometry=zr_.geometry.values,crs=32630)
+print('zones valides',len(zg),'sans géométrie',sans)
 zmark=collections.defaultdict(list)
 sidx=g.sindex
 for _,zr in zg.iterrows():
