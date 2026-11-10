@@ -21,26 +21,22 @@ for k in keys:
     p=dict(id=pid[k],barcode=k[0] or None,nom=k[1] or '(sans nom)',type=r.statut_lotis or 'NON RENSEIGNÉ',source=r.source or 'Non renseigné',arrete=r.arrete_approb,appr=r.plan_approuve,origine=r.origine,nb_lots=int(len(sub)),bbox=[round(float(x),6) for x in b],conformite=conf)
     plans.append(p); meta[k]=p
 json.dump(plans,open(D+r'\plans.json','w',encoding='utf8'),ensure_ascii=False)
-# zones : zones identifiées par l'utilisateur (OUT/Chevauchements_zones_identifiees.gpkg), avec les lotissements concernés
-ZG=r'C:\Users\SITC\Desktop\CLAUDE\DMISSA\OUT\Chevauchements_zones_identifiees.gpkg'
+# zones : couche QGIS « Chevauchements_zones_simplifiees » (fichier + journal WAL = état courant)
+ZG=r'C:\Users\SITC\Desktop\CLAUDE\DMISSA\OUT\Chevauchements_zones_simplifiees.gpkg'
 zr_=gpd.read_file(ZG)
-zr_=zr_[zr_.geometry.notna()&~zr_.geometry.is_empty].copy()
+total_lignes=len(zr_); sans=int(zr_.geometry.isna().sum()); zr_=zr_[zr_.geometry.notna()&~zr_.geometry.is_empty].copy()
 def kk(b,n): return ((b if isinstance(b,str) else '').strip(),(n if isinstance(n,str) else '').strip())
-def zplans(r):
-    out=[]
-    for x in 'ABCD':
-        n=getattr(r,f'{x}_lotissement'); b=getattr(r,f'{x}_barcode')
-        if isinstance(n,str) or isinstance(b,str):
-            k=kk(b,n)
-            if k in pid: out.append(pid[k])
-    return out
-zr_['plans']=[zplans(r) for r in zr_.itertuples()]
-zr_['id']=zr_['zone_id'].astype(int)
+zr_['a']=[pid.get(kk(b,n)) for b,n in zip(zr_.barcode_A,zr_.lotissement_A)]
+zr_['b']=[pid.get(kk(b,n)) for b,n in zip(zr_.barcode_B,zr_.lotissement_B)]
+bad=zr_[zr_.a.isna()|zr_.b.isna()|zr_.id.isna()]
+if len(bad): print('zones non rattachées (ignorées) :',len(bad)); zr_=zr_.drop(bad.index)
+zr_['id']=zr_['id'].astype(int)
+zr_['plans']=[[int(a),int(b)] for a,b in zip(zr_.a,zr_.b)]
 z4=zr_.to_crs(4326)
-z={'type':'FeatureCollection','features':[{'type':'Feature','properties':{'id':int(r.id),'plans':r.plans,'conflit':r.chevauchement_lots=='oui'},'geometry':json.loads(shapely.to_geojson(shapely.set_precision(r.geometry,1e-6)))} for r in z4.itertuples()]}
+z={'type':'FeatureCollection','features':[{'type':'Feature','properties':{'id':int(r.id),'plans':r.plans,'conflit':True},'geometry':json.loads(shapely.to_geojson(shapely.set_precision(r.geometry,1e-6)))} for r in z4.itertuples()]}
 json.dump(z,open(D+r'\zones.geojson','w'))
 zg=zr_[['id','plans','geometry']].copy()
-print('zones',len(zg),'avec lots en conflit',int((zr_.chevauchement_lots=='oui').sum()))
+print('lignes',total_lignes,'zones valides',len(zg),'sans géométrie',sans)
 zmark=collections.defaultdict(list)
 sidx=g.sindex
 for _,zr in zg.iterrows():
