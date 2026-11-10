@@ -4,6 +4,7 @@ const TYPE_LAB=['Normal','Régularisation','Non renseigné'], TYPE_COL=['#2e9e6b
 const SRC_LAB=['DU','DTC','Non renseigné'], SRC_COL=['#1f6fd1','#8e44ad','#9aa5b1'];
 const CONF_LAB=['Non conforme','Conforme','Non renseigné'], CONF_COL=['#d9342b','#2e9e6b','#9aa5b1'];
 const COL_A='#1f6fd1', COL_B='#f0a030', RED='#d9342b';
+const ZCOL=['#1f6fd1','#f0a030','#8e44ad','#14919b'], ZLET=['A','B','C','D'];
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const norm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
@@ -27,7 +28,7 @@ async function boot(){
   const [p,z,l]=await Promise.all([fetch('data/plans.json?v='+Date.now()).then(r=>r.json()),fetch('data/zones.geojson?v='+Date.now()).then(r=>r.json()),fetch('data/lots.geojson?v='+Date.now()).then(r=>r.json())]);
   plans=p.map(x=>({...x,t:x.type==='NORMAL'?0:x.type==='REGULARISATION'?1:2,s:x.source==='DU'?0:x.source==='DTC'?1:2,a:x.arrete?1:0,cf:x.conformite==='conforme'?1:x.conformite==='non_conforme'?0:2,k:norm(x.nom+' '+(x.barcode||''))}));
   plans.forEach(x=>byId[x.id]=x);
-  zones=z.features.filter(f=>f.geometry).map(f=>({id:f.properties.id,a:f.properties.a,b:f.properties.b,bbox:bboxOf(f.geometry)}));
+  zones=z.features.filter(f=>f.geometry).map(f=>({id:f.properties.id,plans:f.properties.plans||[],conflit:!!f.properties.conflit,bbox:bboxOf(f.geometry)}));
   initMap(l,z);
 }
 function bboxOf(g){let a=[1e9,1e9,-1e9,-1e9];const w=c=>{if(typeof c[0]==='number'){a=[Math.min(a[0],c[0]),Math.min(a[1],c[1]),Math.max(a[2],c[0]),Math.max(a[3],c[1])]}else c.forEach(w)};w(g.coordinates);return a}
@@ -103,17 +104,18 @@ function applyMap(){
   if(chev){
     if(S.zone){
       const z=zones.find(x=>x.id===S.zone),tag='|'+S.zone+'|',inz=['in',tag,['coalesce',['get','z'],'']];
-      map.setFilter('chev-lots',['in',['get','p'],['literal',[z.a,z.b]]]);map.setFilter('chev-lots-line',['in',['get','p'],['literal',[z.a,z.b]]]);
-      map.setPaintProperty('chev-lots','fill-color',['case',['==',['get','p'],z.a],COL_A,COL_B]);
+      const zp=z.plans.length?z.plans:[-1];
+      map.setFilter('chev-lots',['in',['get','p'],['literal',zp]]);map.setFilter('chev-lots-line',['in',['get','p'],['literal',zp]]);
+      map.setPaintProperty('chev-lots','fill-color',['match',['get','p'],...z.plans.flatMap((id,i)=>[id,ZCOL[i]]),'#999']);
       map.setPaintProperty('chev-lots','fill-opacity',['case',inz,0.85,0.15]);
       map.setFilter('zone-sel',['==',['get','id'],S.zone]);
       map.setFilter('zones-fill',['!=',['get','id'],S.zone]);map.setFilter('zones-line',['!=',['get','id'],S.zone]);
-      map.setFilter('labels',['in',['get','p'],['literal',[z.a,z.b]]]);
+      map.setFilter('labels',['in',['get','p'],['literal',zp]]);
     }else{
       map.setFilter('chev-lots',['has','z']);map.setFilter('chev-lots-line',['has','z']);
       map.setPaintProperty('chev-lots','fill-color',RED);map.setPaintProperty('chev-lots','fill-opacity',0.75);
       map.setFilter('zone-sel',['==',['get','id'],-1]);map.setFilter('zones-fill',null);map.setFilter('zones-line',null);
-      map.setFilter('labels',['in',['get','p'],['literal',[...new Set(zones.flatMap(z=>[z.a,z.b]))]]]);
+      map.setFilter('labels',['in',['get','p'],['literal',[...new Set(zones.flatMap(z=>z.plans)),-1]]]);
     }
   }
   legend();
@@ -123,7 +125,7 @@ function legend(){
   if(S.mode==='overview')h='<b>Type de plan</b>'+TYPE_LAB.map((t,i)=>row(TYPE_COL[i],t)).join('');
   else if(S.mode==='conf')h='<b>Conformité du plan</b>'+[1,0,2].filter(i=>i<2||plans.some(p=>p.cf===2)).map(i=>row(CONF_COL[i],CONF_LAB[i])).join('')+'<div style="color:#6b7a8c;max-width:170px">Selon le champ « classe » de la couche</div>';
   else if(S.mode==='direction')h='<b>Direction source</b>'+SRC_LAB.map((t,i)=>row(SRC_COL[i],t)).join('');
-  else h='<b>Chevauchement</b>'+row(RED,'Zone de chevauchement')+(S.zone?row(COL_A,'Lotissement A')+row(COL_B,'Lotissement B')+'<div style="color:#6b7a8c">Zoomez pour voir les lots</div>':'<div style="color:#6b7a8c">Zoomez pour voir les lots<br>en conflit</div>');
+  else h='<b>Chevauchement</b>'+row(RED,'Zone de chevauchement')+(S.zone?ZCOL.map((c,i)=>row(c,'Lotissement '+ZLET[i])).join('')+'<div style="color:#6b7a8c">Zoomez pour voir les lots</div>':'<div style="color:#6b7a8c">Zoomez pour voir les lots<br>en conflit</div>');
   $('#legend').innerHTML=h;
 }
 function hint(t){const h=$('#hint');if(!t){h.style.display='none';return}h.textContent=t;h.style.display='block'}
@@ -207,24 +209,25 @@ function confHTML(){
   <div class="sec"><h3 id="lh">Lotissements</h3><div class="list" id="list"></div></div>`;
 }
 function chevPairs(){
-  const m={};zones.forEach(z=>{const a=byId[z.a],b=byId[z.b];const k=[SRC_LAB[a.s],SRC_LAB[b.s]].sort().join(' ↔ ');m[k]=(m[k]||0)+1});return Object.entries(m).sort((x,y)=>y[1]-x[1]);
+  const m={};zones.forEach(z=>{if(z.plans.length<2)return;const a=byId[z.plans[0]],b=byId[z.plans[1]];const k=[SRC_LAB[a.s],SRC_LAB[b.s]].sort().join(' ↔ ');m[k]=(m[k]||0)+1});return Object.entries(m).sort((x,y)=>y[1]-x[1]);
 }
+const zoneName=z=>z.plans.length?z.plans.slice(0,2).map(i=>byId[i].nom).join(' ↔ ')+(z.plans.length>2?' (+'+(z.plans.length-2)+')':''):'Zone n° '+z.id;
 function chevHTML(){
-  const ids=new Set(zones.flatMap(z=>[z.a,z.b]));
-  const cnt={};zones.forEach(z=>[z.a,z.b].forEach(i=>cnt[i]=(cnt[i]||0)+1));
+  const ids=new Set(zones.flatMap(z=>z.plans));
+  const cnt={};zones.forEach(z=>z.plans.forEach(i=>cnt[i]=(cnt[i]||0)+1));
   const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,6);
   if(S.zone){
-    const z=zones.find(x=>x.id===S.zone),A=byId[z.a],B=byId[z.b];
+    const z=zones.find(x=>x.id===S.zone);
     const box=(p,c,l)=>`<div class="card2"><div style="display:flex;align-items:center;gap:8px"><span class="pill" style="background:${c}">${l}</span><h2 style="margin:0">${esc(p.nom)}</h2></div>
       <div class="kv" style="margin-top:8px"><span>Code-barre</span><b>${esc(p.barcode||'—')}</b><span>Direction</span><b>${esc(SRC_LAB[p.s])}</b><span>Type</span><b>${esc(TYPE_LAB[p.t])}</b><span>N° d'arrêté</span><b>${p.arrete?esc(p.arrete):'—'}</b><span>Autres zones</span><b>${(cnt[p.id]||1)-1}</b></div>
       <div style="margin-top:8px"><button class="btn sec2" onclick="goPlan(${p.id})">Voir ce lotissement</button></div></div>`;
     return `<div class="sec"><button class="btn sec2" onclick="clearZone()">← Toutes les zones</button></div>
-      <div class="sec"><h3>Zone de chevauchement n° ${z.id}</h3>${box(A,COL_A,'A')}${box(B,COL_B,'B')}
-      <div style="font-size:12.5px;color:var(--mut)">Les lots en couleur sont ceux qui se superposent ; les autres lots des deux lotissements apparaissent en transparence.</div></div>
+      <div class="sec"><h3>Zone de chevauchement n° ${z.id}</h3>${z.plans.length?z.plans.map((id,i)=>box(byId[id],ZCOL[i],ZLET[i])).join(''):'<div class="empty">Aucun lotissement de l’assemblage dans cette zone.</div>'}
+      <div style="font-size:12.5px;color:var(--mut)">${z.conflit?'Les lots en couleur sont ceux qui se superposent ; les autres lots des lotissements concernés apparaissent en transparence.':'Zone identifiée : aucun lot ne se superpose dans l’assemblage actuel ; les lots des lotissements concernés sont affichés en transparence.'}</div></div>
       <div class="sec"><h3>Discussion sur cette zone</h3><div id="cmt"></div></div>`;
   }
-  return `<div class="sec"><div class="kpis"><div class="kpi"><b>${zones.length}</b><span>zones</span></div><div class="kpi"><b>${ids.size}</b><span>lotissements concernés</span></div><div class="kpi"><b>${chevPairs().length}</b><span>types de conflit</span></div></div></div>
-  <div class="sec"><h3>Conflits selon la direction</h3><table>${chevPairs().map(([k,n])=>`<tr><td>${k}</td><td><b>${n}</b></td></tr>`).join('')}</table></div>
+  return `<div class="sec"><div class="kpis"><div class="kpi"><b>${zones.length}</b><span>zones</span></div><div class="kpi"><b>${ids.size}</b><span>lotissements concernés</span></div><div class="kpi"><b>${zones.filter(z=>z.conflit).length}</b><span>avec lots superposés</span></div></div></div>
+  <div class="sec"><h3>Directions des lotissements concernés</h3><table>${chevPairs().map(([k,n])=>`<tr><td>${k}</td><td><b>${n}</b></td></tr>`).join('')}</table></div>
   <div class="sec"><h3>Lotissements les plus concernés</h3><table>${top.map(([i,n])=>`<tr><td>${esc(byId[i].nom)}</td><td><b>${n}</b></td></tr>`).join('')}</table></div>
   <div class="sec"><h3>Zones de chevauchement</h3><div class="list" id="list"></div></div>`;
 }
@@ -248,7 +251,7 @@ function bindSide(){
 function refreshList(){
   const el=$('#list');if(!el)return;
   if(S.mode==='chev'){
-    el.innerHTML=zones.map(z=>{const a=byId[z.a],b=byId[z.b],n=S.counts['zone:'+z.id];return `<div class="item" data-z="${z.id}"><div class="n">${esc(a.nom)} <span style="color:var(--red)">↔</span> ${esc(b.nom)}${n?`<span class="badge">💬${n}</span>`:''}</div><div class="m">${tag(SRC_LAB[a.s],SRC_COL[a.s])}${tag(SRC_LAB[b.s],SRC_COL[b.s])}<span class="tag out">Zone ${z.id}</span></div></div>`}).join('');
+    el.innerHTML=zones.map(z=>{const n=S.counts['zone:'+z.id];return `<div class="item" data-z="${z.id}"><div class="n">${esc(zoneName(z))}${n?`<span class="badge">💬${n}</span>`:''}</div><div class="m">${z.plans.slice(0,3).map(i=>tag(SRC_LAB[byId[i].s],SRC_COL[byId[i].s])).join('')}<span class="tag out">Zone ${z.id}</span>${z.conflit?tag('Lots superposés',RED):''}</div></div>`}).join('');
     el.onclick=e=>{const i=e.target.closest('.item');if(i)selectZone(+i.dataset.z)};return;
   }
   const r=plans.filter(p=>matches(p));
