@@ -26,12 +26,25 @@ ZG=r'C:\Users\SITC\Documents\Promotions_Bingerville\DMISSA PRESENTATION\suite\ch
 zr_=gpd.read_file(ZG).rename(columns={'lotissemen':'lotissement_A','lotissem_1':'lotissement_B'})
 total_lignes=len(zr_); sans=int(zr_.geometry.isna().sum()); zr_=zr_[zr_.geometry.notna()&~zr_.geometry.is_empty].copy()
 def kk(b,n): return ((b if isinstance(b,str) else '').strip(),(n if isinstance(n,str) else '').strip())
-zr_['a']=[pid.get(kk(b,n)) for b,n in zip(zr_.barcode_A,zr_.lotissement_A)]
-zr_['b']=[pid.get(kk(b,n)) for b,n in zip(zr_.barcode_B,zr_.lotissement_B)]
-bad=zr_[zr_.a.isna()|zr_.b.isna()|zr_.id.isna()]
-if len(bad): print('zones non rattachées (ignorées) :',len(bad)); zr_=zr_.drop(bad.index)
-zr_['id']=zr_['id'].astype(int)
-zr_['plans']=[[int(a),int(b)] for a,b in zip(zr_.a,zr_.b)]
+names_by_key={k:k[1] for k in pid}
+def match(b,n):
+    k=kk(b,n)
+    if k in pid: return pid[k]
+    if k[1]:  # nom tronqué : correspondance par préfixe
+        c=[v for (bc,nm),v in pid.items() if nm.startswith(k[1]) and (not k[0] or bc==k[0])]
+        if len(c)==1: return c[0]
+    return None
+zr_['a']=[match(b,n) for b,n in zip(zr_.barcode_A,zr_.lotissement_A)]
+zr_['b']=[match(b,n) if isinstance(n,str) and n.strip() else None for b,n in zip(zr_.barcode_B,zr_.lotissement_B)]
+nxt=int(zr_.id.max())+1 if zr_.id.notna().any() else 1
+ids=[]
+for v in zr_.id:
+    if v!=v or v is None: ids.append(nxt); nxt+=1
+    else: ids.append(int(v))
+zr_['id']=ids
+zr_['plans']=[list(dict.fromkeys(int(x) for x in (a,b) if x==x and x is not None)) for a,b in zip(zr_.a,zr_.b)]
+bad=zr_[zr_.plans.map(len)==0]
+if len(bad): print('zones sans lotissement rattaché (ignorées) :',len(bad)); zr_=zr_.drop(bad.index)
 z4=zr_.to_crs(4326)
 z={'type':'FeatureCollection','features':[{'type':'Feature','properties':{'id':int(r.id),'plans':r.plans,'conflit':True},'geometry':json.loads(shapely.to_geojson(shapely.set_precision(r.geometry,1e-6)))} for r in z4.itertuples()]}
 json.dump(z,open(D+r'\zones.geojson','w'))
