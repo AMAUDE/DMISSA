@@ -226,8 +226,7 @@ function chevHTML(){
       <div style="font-size:12.5px;color:var(--mut)">${z.conflit?'Les lots en couleur sont ceux qui se superposent ; les autres lots des lotissements concernés apparaissent en transparence.':'Zone identifiée : aucun lot ne se superpose dans l’assemblage actuel ; les lots des lotissements concernés sont affichés en transparence.'}</div></div>
       <div class="sec"><h3>Discussion sur cette zone</h3><div id="cmt"></div></div>`;
   }
-  return `<div class="sec"><div class="kpis"><div class="kpi"><b>${zones.length}</b><span>zones</span></div><div class="kpi"><b>${ids.size}</b><span>lotissements concernés</span></div><div class="kpi"><b>${chevPairs().length}</b><span>types de conflit</span></div></div></div>
-  <div class="sec"><h3>Conflits selon la direction</h3><table>${chevPairs().map(([k,n])=>`<tr><td>${k}</td><td><b>${n}</b></td></tr>`).join('')}</table></div>
+  return `<div class="sec"><div class="kpis" style="grid-template-columns:repeat(2,1fr)"><div class="kpi"><b>${zones.length}</b><span>zones</span></div><div class="kpi"><b>${ids.size}</b><span>lotissements concernés</span></div></div></div>
   <div class="sec"><h3>Lotissements les plus concernés</h3><table>${top.map(([i,n])=>`<tr><td>${esc(byId[i].nom)}</td><td><b>${n}</b></td></tr>`).join('')}</table></div>
   <div class="sec"><h3>Zones de chevauchement</h3><div class="list" id="list"></div></div>`;
 }
