@@ -43,6 +43,20 @@ for v in zr_.id:
     else: ids.append(int(v))
 zr_['id']=ids
 zr_['plans']=[list(dict.fromkeys(int(x) for x in (a,b) if x==x and x is not None)) for a,b in zip(zr_.a,zr_.b)]
+# zones rattachées à un seul lotissement : on ajoute les autres lotissements dont les lots chevauchent les siens dans la zone
+_sx=g.sindex
+def completer(r):
+    pl=list(r.plans)
+    if len(pl)!=1: return pl
+    sub=g.iloc[_sx.query(r.geometry,predicate='intersects')]
+    sub=sub[sub.geometry.intersection(r.geometry).area>1]
+    A=sub[sub.pid==pl[0]]
+    if not len(A): return pl
+    au=A.geometry.union_all()
+    for p,s in sub[sub.pid!=pl[0]].groupby('pid'):
+        if s.geometry.union_all().intersection(au).area>1: pl.append(int(p))
+    return pl
+zr_['plans']=[completer(r) for r in zr_.itertuples()]
 bad=zr_[zr_.plans.map(len)==0]
 if len(bad): print('zones sans lotissement rattaché (ignorées) :',len(bad)); zr_=zr_.drop(bad.index)
 z4=zr_.to_crs(4326)

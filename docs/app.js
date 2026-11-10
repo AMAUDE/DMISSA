@@ -227,7 +227,6 @@ function chevHTML(){
       <div class="sec"><h3>Discussion sur cette zone</h3><div id="cmt"></div></div>`;
   }
   return `<div class="sec"><div class="kpis" style="grid-template-columns:repeat(2,1fr)"><div class="kpi"><b>${zones.length}</b><span>zones</span></div><div class="kpi"><b>${ids.size}</b><span>lotissements concernés</span></div></div></div>
-  <div class="sec"><h3>Lotissements les plus concernés</h3><table>${top.map(([i,n])=>`<tr><td>${esc(byId[i].nom)}</td><td><b>${n}</b></td></tr>`).join('')}</table></div>
   <div class="sec"><h3>Zones de chevauchement</h3><div class="list" id="list"></div></div>`;
 }
 window.goPlan=id=>{S.mode='overview';S.confs=new Set([0,1,2]);document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.mode==='overview'));S.zone=null;S.types=new Set([0,1,2]);S.arr='all';selectPlan(id)};
